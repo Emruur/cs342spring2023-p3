@@ -315,8 +315,7 @@ int rm_detection()
     //4
     for(int i= 0; i<N; i++)
         if(!finished[i]){
-            ret= 1;
-            break;
+            ret++;
         }
 
     pthread_mutex_unlock(&global_lock);
