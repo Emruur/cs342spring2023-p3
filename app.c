@@ -7,7 +7,7 @@
 #include "rm.h"
 
 #define NUMR 1        // number of resource types
-#define NUMP 3        // number of threads
+#define NUMP 2        // number of threads
 
 int AVOID = 1;
 int exist[1] =  {8};  // resources existing in the system
@@ -48,27 +48,25 @@ void *threadfunc1 (void *a)
     int claim[MAXR];
     
     tid = *((int*)a);
-    printf("THREAD %d STARTED\n",tid);
     rm_thread_started (tid);
 
-    sleep(4);
-
-    printf("t%d clailimng...\n",tid);
     setarray(claim, NUMR, 8);
     rm_claim (claim);
     
-    // setarray(request1, NUMR, 5);
-    // pr (tid, "REQ", NUMR, request1);
-    // rm_request (request1);
+    setarray(request1, NUMR, 5);
+    pr (tid, "REQ", NUMR, request1);
+    rm_request (request1);
 
-    // sleep(4);
+    sleep(4);
 
-    // setarray(request2, NUMR, 3);
-    // pr (tid, "REQ", NUMR, request2);
-    // rm_request (request2);
+    setarray(request2, NUMR, 3);
+    pr (tid, "REQ", NUMR, request2);
+    rm_request (request2);
 
-    // rm_release (request1);
-    // rm_release (request2);
+    sleep(2);
+
+    rm_release (request1);
+    rm_release (request2);
 
     rm_thread_ended();
     pthread_exit(NULL);
@@ -97,6 +95,8 @@ void *threadfunc2 (void *a)
     setarray(request2, NUMR, 4);
     pr (tid, "REQ", NUMR, request2);
     rm_request (request2);
+
+    sleep(2);
 
     rm_release (request1);
     rm_release (request2);
@@ -135,13 +135,7 @@ int main(int argc, char **argv)
     i = 1;  // we select a tid for the thread
     tids[i] = i;
     pthread_create (&(threadArray[i]), NULL,
-                    (void *) threadfunc1, (void *)
-                    (void*)&tids[i]);
-
-    i = 3;  // we select a tid for the thread
-    tids[i] = i;
-    pthread_create (&(threadArray[i]), NULL,
-                    (void *) threadfunc1, (void *)
+                    (void *) threadfunc2, (void *)
                     (void*)&tids[i]);
 
     count = 0;
@@ -152,6 +146,7 @@ int main(int argc, char **argv)
         if (ret > 0) {
             printf ("deadlock detected, count=%d\n", ret);
             rm_print_state("state after deadlock");
+            break;
         }
         count++;
     }
@@ -163,5 +158,4 @@ int main(int argc, char **argv)
         }
     }
 }
-
 

@@ -43,29 +43,13 @@ void vector_sub(int* a, int* b, int* result, int n) {
         result[i] = a[i] - b[i];
     }
 }
-// Vector comparison, returns true if vectors are equal, else false
-// Vector Comparison
-// Returns -1 if a < b, 1 if a > b, 0 if a == b
+// Checks if a vector is smaller or equal to a vector, returns 1. 0 otherwise
 int vector_compare(int* a, int* b, int n) {
-    bool is_a_less_than_b = true;
-    bool is_a_greater_than_b = true;
-
-    for(int i = 0; i < n; i++) {
-        if(a[i] >= b[i]) {
-            is_a_less_than_b = false;
-        }
-        if(a[i] <= b[i]) {
-            is_a_greater_than_b = false;
-        }
+    for (int i= 0  ; i<n; i++) {
+        if(a[i]>b[i])
+            return 0;
     }
-
-    if(is_a_less_than_b) {
-        return -1;
-    } else if(is_a_greater_than_b) {
-        return 1;
-    } else {
-        return 0;
-    }
+    return 1;
 }
 // Vector Copy
 void vector_copy(int* src, int* dest, int n) {
@@ -89,6 +73,14 @@ void print_vector(int* a, int n) {
         }
     }
     printf("]\n");
+}
+
+//returns 1 if equal, 0 othervise
+bool vector_equal(int* a, int* b, int n){
+    for(int i= 0; i< n; i++)
+        if(a[i] != b[i])
+            return 0;
+    return 1;
 }
 
 int find_thread_index(pthread_t thread_id){
@@ -124,11 +116,13 @@ int rm_thread_ended()
     return 0;
 }
 
-int rm_claim (int claim[])
+int rm_claim (int* claim)
 {
     pthread_mutex_lock(&global_lock);
     int t_index= find_thread_index(pthread_self());
-    if(t_index<0 || vector_compare(claim, ExistingRes, M) > 0){
+
+    if(t_index<0 || !vector_compare(claim, ExistingRes, M)){
+        printf("CLAIM ERROR\n");
         pthread_mutex_unlock(&global_lock);
         return 1;
     }
@@ -207,7 +201,7 @@ bool bankers_algo(int request[], int t_index){
         //2
         int i_found= -1;
         for (int i= 0; i<N; i++) {
-            if(!finished[i] && vector_compare(need_temp[i], work, M) <= 0)
+            if(!finished[i] && vector_compare(need_temp[i], work, M))
                 i_found= i;
         }
         if(i_found<0)
@@ -230,7 +224,7 @@ int rm_request (int request[])
     pthread_mutex_lock(&global_lock);
     int t_index= find_thread_index(pthread_self());
     //If thread is registered and request does not exceed the existing resources(not available ones)
-    if(t_index<0 || vector_compare(request, ExistingRes, M) > 0){
+    if(t_index<0 || !vector_compare(request, ExistingRes, M)){
         pthread_mutex_unlock(&global_lock);
         return 1;
     }
@@ -240,7 +234,7 @@ int rm_request (int request[])
 
     if(DA){
         //If requested resources are within the limit of claimed ones
-        if(vector_compare(request, max[t_index], M)>0){
+        if(!vector_compare(request, max[t_index], M)){
             vector_sub(request_matrix[t_index], request, request_matrix[t_index], M);
             pthread_mutex_unlock(&global_lock);
             return 1;
@@ -251,7 +245,7 @@ int rm_request (int request[])
     }
 
     //Allocate the resource if there are available
-    while(vector_compare(request, available, M)>0){
+    while(!vector_compare(request, available, M)){
         pthread_cond_wait(&global_cv, &global_lock);
     }
 
@@ -273,7 +267,7 @@ int rm_release (int release[])
     pthread_mutex_lock(&global_lock);
     int t_index= find_thread_index(pthread_self());
 
-    if(t_index<0 || vector_compare(release, allocation[t_index], M) > 0){
+    if(t_index<0 || !vector_compare(release, allocation[t_index], M)){
         pthread_mutex_unlock(&global_lock);
         return 1;
     }
@@ -292,8 +286,40 @@ int rm_release (int release[])
 
 int rm_detection()
 {
+    pthread_mutex_lock(&global_lock);
     int ret = 0;
-    //TODO implement detection
+
+    int work[MAXR];
+    bool finished[MAXP];
+    int empty[MAXR]= {0};
+
+    // 1
+    vector_copy(available, work, M);
+    for(int i= 0; i<N; i++)
+        finished[i]= vector_equal(allocation[i], empty , N);
+    
+    while(true){
+        //2
+        int i_found= -1;
+        for(int i= 0; i< N; i++)
+            if(!finished[i] && vector_compare(request_matrix[i], work, M)){
+                i_found= i;
+                break;
+            }
+        if(i_found<0)
+            break;
+        //3
+        vector_add(work, allocation[i_found], work, M);
+        finished[i_found]= true;
+    }
+    //4
+    for(int i= 0; i<N; i++)
+        if(!finished[i]){
+            ret= 1;
+            break;
+        }
+
+    pthread_mutex_unlock(&global_lock);
     return (ret);
 }
 
@@ -307,54 +333,77 @@ void rm_print_state(char headermsg[]) {
     printf("Registered Threads: \n");
     for(i = 0; i< N; i++)
         printf("Index %d: %ld\n",i,(long)tid_table[i]);
+
+    //Existing resources
     printf("Exist:\n");
-    for (i = 0; i < M; i++)
-        printf("R%d: %2d ", i, ExistingRes[i]);
+    printf("\t");
+    for(int i= 0; i<M; i++)
+        printf("R%d\t",i);
+    printf("\n");
+    printf("\t");
+    for(int i= 0; i<M; i++){
+        printf("%d\t",ExistingRes[i]);
+    }
+    printf("\n");
+
+    //Available
     printf("\nAvailable:\n");
-    for (i = 0; i < M; i++)
-        printf("R%d: %2d ", i, available[i]);
+    printf("\t");
+    for(int i= 0; i<M; i++)
+        printf("R%d\t",i);
+    printf("\n");
+    printf("\t");
+    for(int i= 0; i<M; i++){
+        printf("%d\t",available[i]);
+    }
+    printf("\n");
+
     printf("\nAllocation:\n");
-    printf("     ");
-    for (i = 0; i < M; i++)
-        printf("R%d ", i);
+    printf("\t");
+    for(int i= 0; i<M; i++)
+        printf("R%d\t",i);
     printf("\n");
-    for (i = 0; i < M; i++) {
-        printf("T%d: ", i);
+    for (i = 0; i < N; i++) {
+        printf("T%d:\t", i);
         for (j = 0; j < M; j++)
-            printf("%2d ", allocation[i][j]);
+            printf("%d\t", allocation[i][j]);
         printf("\n");
     }
-    printf("Request:\n");
-    printf("     ");
-    for (i = 0; i < M; i++)
-        printf("R%d ", i);
+
+
+    printf("\nRequest:\n");
+    printf("\t");
+    for(int i= 0; i<M; i++)
+        printf("R%d\t",i);
     printf("\n");
-    for (i = 0; i < M; i++) {
-        printf("T%d: ", i);
+    for (i = 0; i < N; i++) {
+        printf("T%d:\t", i);
         for (j = 0; j < M; j++)
-            printf("%2d ", request_matrix[i][j]);
+            printf("%d\t", request_matrix[i][j]);
         printf("\n");
     }
-    printf("Max:\n");
-    printf("     ");
-    for (i = 0; i < M; i++)
-        printf("R%d ", i);
+
+    printf("\nMax:\n");
+    printf("\t");
+    for(int i= 0; i<M; i++)
+        printf("R%d\t",i);
     printf("\n");
-    for (i = 0; i < M; i++) {
-        printf("T%d: ", i);
+    for (i = 0; i < N; i++) {
+        printf("T%d:\t", i);
         for (j = 0; j < M; j++)
-            printf("%2d ", max[i][j]);
+            printf("%d\t", max[i][j]);
         printf("\n");
     }
-    printf("Need:\n");
-    printf("     ");
-    for (i = 0; i < M; i++)
-        printf("R%d ", i);
+
+    printf("\nNeed:\n");
+    printf("\t");
+    for(int i= 0; i<M; i++)
+        printf("R%d\t",i);
     printf("\n");
-    for (i = 0; i < M; i++) {
-        printf("T%d: ", i);
+    for (i = 0; i < N; i++) {
+        printf("T%d:\t", i);
         for (j = 0; j < M; j++)
-            printf("%2d ", need[i][j]);
+            printf("%d\t", need[i][j]);
         printf("\n");
     }
 
